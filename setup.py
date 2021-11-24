@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-# python setup.py register sdist upload
+
 from setuptools import setup
 
 setup(

@@ -174,7 +174,3 @@ def save_pkl(obj, pkl_path):
 def load_pkl(pkl_path):
     with open(pkl_path, "rb") as frb:
         return pkl.load(frb)
-
-
-# 公共初始化的
-logger = Logger().get_logger()
