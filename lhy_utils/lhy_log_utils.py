@@ -6,7 +6,6 @@ from logging.handlers import RotatingFileHandler
 
 class Logger:
     def __init__(self, log_file=None):
-        print("init")
         self.logger = logging.getLogger(os.path.realpath(__file__))
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False
