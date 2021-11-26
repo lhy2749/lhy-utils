@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name='lhy-utils',
-    version='0.0.7',
+    version='0.0.8',
     author='lhy',
     url='https://github.com/lhy2749/lhy-utils',
     author_email='379970083@qq.com',

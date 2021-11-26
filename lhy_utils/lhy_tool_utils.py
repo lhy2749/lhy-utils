@@ -64,3 +64,9 @@ def cut_list(target, batch_size):
 
 def args_to_str(args):
     return [str(i) for i in args]
+
+
+def dict_set_value(input_data, args):
+    assert len(args) == len(input_data.keys())
+    for i, k in enumerate(input_data.keys()):
+        input_data[k].append(args[i])
