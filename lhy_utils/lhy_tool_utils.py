@@ -58,8 +58,7 @@ def get_gpu_num():
 
 
 def cut_list(target, batch_size):
-    for i in range(0, len(target), batch_size):
-        yield target[i: i + batch_size]
+    return [target[i:i + batch_size] for i in range(0, len(target), batch_size)]
 
 
 def args_to_str(args):
