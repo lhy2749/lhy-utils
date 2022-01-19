@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import re
 import subprocess
+from collections import Counter
 
 import numpy as np
 
@@ -69,3 +70,33 @@ def dict_set_value(input_data, args):
     assert len(args) == len(input_data.keys())
     for i, k in enumerate(input_data.keys()):
         input_data[k].append(args[i])
+
+
+def l2_normalize(vecs):
+    """l2标准化
+    :param vecs: np.ndarray
+    """
+    norms = (vecs ** 2).sum(axis=1, keepdims=True) ** 0.5
+    return vecs / np.clip(norms, 1e-8, np.inf)
+
+
+def data_count(text_list, level="char"):
+    """
+    统计一个list的文本的长度
+    """
+    assert level in ["char", "word", "c", "w"]
+    count_list = []
+    for text in text_list:
+        token_num = len(text.split()) if level[0] == "w" else len(text)
+        count_list.append(token_num)
+    counter = Counter(count_list)
+    high_freq = counter.most_common(1)[0]
+    result = {
+        "min_length": min(count_list),
+        "max_length": max(count_list),
+        "ave_length": int(sum(count_list) / len(count_list)),
+        "high_freq_length": high_freq[0],
+        "high_freq_numbers": high_freq[1],
+        "counter": counter
+    }
+    return result
