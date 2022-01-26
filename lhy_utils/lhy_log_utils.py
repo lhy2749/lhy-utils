@@ -34,10 +34,8 @@ def get_now_time():
         month = f"0{month}"
     if day < 10:
         day = f"0{day}"
-    # hour = now_time.hour
     # minute = now_time.minute
-    # second = now_time.second
-    # return f"{hour}-{minute}-{year}"  # debug用
+    # return f"{year}-{month}-{minute}"  # debug用
     return f"{year}-{month}-{day}"
 
 
@@ -47,7 +45,7 @@ class MyFormatter(logging.Formatter):
     1、重置默认的时间格式
     2、把包路径改到3层路径
     Attribute:
-        default_time_format: 除了毫秒以后的时间格式
+        default_time_format: 除了毫秒的时间格式
         default_msec_format: 毫秒的时间格式，这里时区写死+0800
         with_color: 是否带上颜色，输出系统的format可以带颜色，输出到文件的不能带颜色
     """
@@ -146,27 +144,39 @@ class MyHandler(BaseRotatingHandler):
         if self.dateNow != now_time:
             # 新的一天的日志
             self.dateNow = now_time
-            self.baseFilename = os.path.join(self.dir_name, f"{self.log_module}-{self.log_type}.{self.dateNow}.0.log")
+            # 万一出现存在意外日志就删除。保证新的一天没有新日期的日志。
+            # XX-xx.2022-01-25
+            new_day_template = os.path.join(self.dir_name, f'{self.log_module}-{self.log_type}.{self.dateNow}')
+            cmd = f"rm -rf f {new_day_template}.*.log"
+            os.system(cmd)
+            self.baseFilename = new_day_template + ".0.log"
         else:
             # 文件容量达到预设值，需要新增一个当天的日志文件
-            exists_log_file_list = []
             base_file_name = os.path.basename(self.baseFilename)
             template_list = base_file_name.split(".")
             template_ = ".".join(template_list[:-2]) + "."
             template_file_name = template_ + "%d.log"
+            now_index = int(template_list[-2])  # 当前日志的下标
+            exists_log_file_list = []
             for fn in os.listdir(self.dir_name):  # 遍历日志文件下已有的文件
                 if fn.startswith(template_) and fn.endswith(".log"):
-                    log_index = int(fn.replace(template_, "").replace(".log", ""))  # 日志的下标
-                    exists_log_file_list.append(log_index)
-            if len(exists_log_file_list) > 0:
-                if len(exists_log_file_list) > self.backup_count:
-                    # 如果日志文件数量大于100个了，删除最早的那个
-                    min_index = min(exists_log_file_list)
-                    os.remove(os.path.join(self.dir_name, template_file_name % min_index))
-                now_index = int(template_list[2])  # 当前日志文件的N
-                self.baseFilename = os.path.join(template_file_name % (now_index + 1))
-            else:
-                raise ValueError("日志文件数量错误")
+                    try:
+                        log_index = int(fn.replace(template_, "").replace(".log", ""))  # 日志的下标
+                        exists_log_file_list.append(log_index)
+                    except ValueError:  # 如果异常说明该文件下标位置存在非数字，如triton-main.11-47-2022.0的副本.log
+                        continue
+            # 如果当前的日志是99.log满了，需要流转到100.log，那么就要删除0.log保证该天的日志文件只有100个
+            assert len(exists_log_file_list) > 0, "当前日志数量一定是大于0的"
+            exists_log_file_list.sort()  # 对已有的日志下标进行排序
+            max_index = exists_log_file_list[-1]  # 当前已有日志的下标
+            assert max_index == now_index, "当前日志下标一定是最大的"
+            self.baseFilename = os.path.join(self.dir_name, template_file_name % (now_index + 1))
+            exists_log_file_list.append(now_index + 1)
+            if len(exists_log_file_list) > self.backup_count:
+                for i in exists_log_file_list[:len(exists_log_file_list) - self.backup_count]:
+                    delete_path = os.path.join(self.dir_name, template_file_name % i)
+                    if os.path.exists(delete_path):
+                        os.remove(delete_path)
         if not self.delay:
             self.stream = self._open()
 
@@ -189,8 +199,8 @@ class Logger:
         self.log_type = log_type
         self.log_dir = log_dir
         self.date_now = get_now_time()  # 当前时间的年月日
-        self.max_bytes = 100 * 1024 * 1024  # 最大100M日志
-        self.backup_count = 100  # 每天最多100个日志文件
+        self.max_bytes = 500  # 最大100M日志
+        self.backup_count = 5  # 每天最多100个日志文件
         self.logger = logging.getLogger(os.path.realpath(__file__))
         self.logger.setLevel(log_level[level.lower()])
         self.logger.propagate = False
@@ -212,7 +222,7 @@ class Logger:
                                      mode="a",
                                      delay=False,
                                      encoding="utf-8")
-            self.handler.setLevel(logging.ERROR)
+            self.handler.setLevel(log_level[level.lower()])
             self.handler.setFormatter(MyFormatter(fmt=self.fmt_str))
             self.logger.addHandler(self.handler)
 
@@ -229,6 +239,12 @@ class Logger:
                 exists_log_file_list.append(log_index)
         # 根据已有的日志去判读当前的日志序号是多少
         if len(exists_log_file_list) > 0:
+            if len(exists_log_file_list) > self.backup_count:  # 如果出了意外导致最大数量超过了100个，那就删了以前的
+                exists_log_file_list.sort()
+                for i in exists_log_file_list[:len(exists_log_file_list) - self.backup_count]:
+                    delete_path = os.path.join(self.log_dir, template_file_name % i)
+                    if os.path.exists(delete_path):
+                        os.remove(delete_path)
             now_index = max(exists_log_file_list)
             file_path = os.path.join(self.log_dir, template_file_name % now_index)
             if os.path.getsize(file_path) < self.max_bytes:  # 如果最近的文件还没有满，继续往里面写
@@ -245,20 +261,19 @@ class Logger:
             return file_path
 
     def debug(self, message):
-        self.logger.debug(" | " + message)
+        self.logger.debug(" | " + str(message))
 
     def info(self, message):
-        self.logger.info(" | " + message)
+        self.logger.info(" | " + str(message))
 
     def warning(self, message):
-        self.logger.warning(" | " + message)
+        self.logger.warning(" | " + str(message))
 
     def error(self, message, error_code=-1):
-        self.logger.error(str(error_code) + " | " + message)
+        self.logger.error(str(error_code) + " | " + str(message))
 
     def critical(self, message):
-        self.logger.critical(" | " + message)
+        self.logger.critical(" | " + str(message))
 
 
 # logger = Logger(log_module="triton", log_type="main", log_dir="./", level="info")
-# logger.warning("ddd111")
