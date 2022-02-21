@@ -40,6 +40,15 @@ def write_json_line(j_data, j_path):
             fw.write(json.dumps(data, ensure_ascii=False) + "\n")
 
 
+def read_text_line(file_name):
+    return [i.strip() for i in open(file_name, "r", encoding="utf-8").readlines()]
+
+
+def write_text_line(data, file_name):
+    with open(file_name, "w", encoding="utf-8") as fw:
+        fw.write("\n".join(data))
+
+
 def save_pkl(obj, pkl_path):
     with open(pkl_path, "wb") as fwb:
         pkl.dump(obj, fwb)
