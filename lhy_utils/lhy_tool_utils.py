@@ -100,3 +100,27 @@ def data_count(text_list, level="char"):
         "counter": counter
     }
     return result
+
+
+def exec_shell(cmd):
+    """打印并执行命令内容，并支持写入日志文件中
+    Args:
+        cmd: 执行命令的内容（str）
+    Returns:
+        status: 执行状态
+    """
+    print(cmd)
+    regex = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}")
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    while p.poll() is None:
+        line = p.stdout.readline().strip().decode()
+        if line:
+            if re.search(regex, line) is None:
+                print(line)
+            else:
+                print.info(line)
+    status = p.returncode
+    if status != 0:
+        # logger.info(f'exec cmd failed. {cmd}', exc_info=True)
+        print(f'exec cmd failed. {cmd}')
+    return status
