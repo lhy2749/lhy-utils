@@ -257,6 +257,6 @@ class MyLogger:
     def get_logger(self):
         return self.logger
 
-logger = MyLogger(log_module="triton", log_type="main", log_dir="./").get_logger()
-for i in range(100):
-    logger.error(i, error_code="500")
+# logger = MyLogger(log_module="triton", log_type="main", log_dir="./").get_logger()
+# for i in range(100):
+#     logger.error(i, error_code="500")
