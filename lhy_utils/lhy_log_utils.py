@@ -2,15 +2,15 @@
 import os
 from datetime import datetime
 import time
-import nlp_logging as logging  # 修改Logger类中的_log函数使得能够加入error_code参数
+from .nlp_logging import *
 from logging.handlers import BaseRotatingHandler
 
 log_level = {
-    "debug": logging.DEBUG,
-    "info": logging.INFO,
-    "warning": logging.WARNING,
-    "error": logging.ERROR,
-    "critical": logging.CRITICAL
+    "debug": DEBUG,
+    "info": INFO,
+    "warning": WARNING,
+    "error": ERROR,
+    "critical": CRITICAL
 }
 
 log_color = {
@@ -26,7 +26,7 @@ def get_current_time():
     return datetime.now().strftime('%Y-%m-%d')
 
 
-class MyFormatter(logging.Formatter):
+class MyFormatter(Formatter):
     """
     重写format类
     1、重置默认的时间格式
@@ -195,12 +195,12 @@ class MyLogger:
         self.date_now = get_current_time()  # 当前时间的年月日
         self.max_bytes = 100 * 1024 * 1024  # 最大100M日志
         self.backup_count = 100  # 每天最多100个日志文件
-        self.logger = logging.getLogger(os.path.realpath(__file__))
+        self.logger = getLogger(os.path.realpath(__file__))
         self.logger.setLevel(log_level[level.lower()])
         self.logger.propagate = False
         self.fmt_str = "%(asctime)s | %(levelname)s | %(pathname)s:%(lineno)d | %(process)d/%(thread)d | %(message)s"
         # 用于输出系统
-        self.sh = logging.StreamHandler()
+        self.sh = StreamHandler()
         self.sh.setLevel(log_level[level.lower()])
         self.sh.setFormatter(MyFormatter(fmt=self.fmt_str, with_color=True))
         self.logger.addHandler(self.sh)
@@ -257,6 +257,6 @@ class MyLogger:
     def get_logger(self):
         return self.logger
 
-# logger = MyLogger(log_module="triton", log_type="main", log_dir="./").get_logger()
-# for i in range(100):
-#     logger.error(i, error_code="500")
+logger = MyLogger(log_module="triton", log_type="main", log_dir="./").get_logger()
+for i in range(100):
+    logger.error(i, error_code="500")
