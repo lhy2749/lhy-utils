@@ -1,8 +1,8 @@
 # coding: utf-8
-import datetime
-import time
-import logging
 import os
+from datetime import datetime
+import time
+import nlp_logging as logging  # 修改Logger类中的_log函数使得能够加入error_code参数
 from logging.handlers import BaseRotatingHandler
 
 log_level = {
@@ -22,21 +22,8 @@ log_color = {
 }
 
 
-def get_now_time():
-    """
-    获取日期{YYYY-mm-dd}
-    """
-    now_time = datetime.datetime.now()
-    year = now_time.year
-    month = now_time.month
-    day = now_time.day
-    if month < 10:
-        month = f"0{month}"
-    if day < 10:
-        day = f"0{day}"
-    # minute = now_time.minute
-    # return f"{year}-{month}-{minute}"  # debug用
-    return f"{year}-{month}-{day}"
+def get_current_time():
+    return datetime.now().strftime('%Y-%m-%d')
 
 
 class MyFormatter(logging.Formatter):
@@ -52,15 +39,18 @@ class MyFormatter(logging.Formatter):
 
     def __init__(self, with_color=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default_time_format = "%Y-%m-%dT%H:%M:%S"
-        self.default_msec_format = "%s.%03d+0800"
+        self.default_time_format = "%Y-%m-%d %H:%M:%S"
+        self.default_msec_format = "%s.%03d"
         self.with_color = with_color
         if with_color:
             self.color_template = "\033[1;%dm%s\033[0m"
 
-    def format(self, record):
+    @staticmethod
+    def get_3_path(record):
+        """
+        仅保留三层路径
+        """
         pathname = record.pathname
-        # 不确定windows的路径，暂时只使用os包进行路径划分
         dir_list = []
         if pathname:
             file_name = os.path.basename(pathname)
@@ -76,7 +66,17 @@ class MyFormatter(logging.Formatter):
         dir_list = dir_list[::-1]
         new_path = "/".join(dir_list)
         record.pathname = new_path
+
+    def format(self, record):
+        # self.get_3_path(record)  # 仅保留最近三层路径
+        level = record.levelname.lower()
+        source_msg = record.msg  # 有两个handle，分别是控制台和文件，共用record，如果修改了record的msg不改回去，msg会重复拼接
+        if level == "error":
+            record.msg = f"{record.error_code} | {record.msg}"
+        else:
+            record.msg = f" | {record.msg}"
         result_without_color = super().format(record)
+        record.msg = source_msg
         if not self.with_color:  # 不带颜色
             return result_without_color
         else:
@@ -128,7 +128,7 @@ class MyHandler(BaseRotatingHandler):
             self.stream.seek(0, 2)
             if self.stream.tell() + len(msg) >= self.max_bytes:
                 return 1
-        if get_now_time() != self.dateNow:
+        if get_current_time() != self.dateNow:
             return 1
         return 0
 
@@ -140,19 +140,16 @@ class MyHandler(BaseRotatingHandler):
         if self.stream:
             self.stream.close()
             self.stream = None
-        now_time = get_now_time()
+        now_time = get_current_time()
         if self.dateNow != now_time:
             # 新的一天的日志
             self.dateNow = now_time
-            # 万一出现存在意外日志就删除。保证新的一天没有新日期的日志。
             # XX-xx.2022-01-25
             new_day_template = os.path.join(self.dir_name, f'{self.log_module}-{self.log_type}.{self.dateNow}')
-            cmd = f"rm -rf f {new_day_template}.*.log"
-            os.system(cmd)
             self.baseFilename = new_day_template + ".0.log"
         else:
             # 文件容量达到预设值，需要新增一个当天的日志文件
-            base_file_name = os.path.basename(self.baseFilename)
+            base_file_name = os.path.basename(self.baseFilename)  # XX-xx.2022-01-25.1.log
             template_list = base_file_name.split(".")
             template_ = ".".join(template_list[:-2]) + "."
             template_file_name = template_ + "%d.log"
@@ -160,11 +157,8 @@ class MyHandler(BaseRotatingHandler):
             exists_log_file_list = []
             for fn in os.listdir(self.dir_name):  # 遍历日志文件下已有的文件
                 if fn.startswith(template_) and fn.endswith(".log"):
-                    try:
-                        log_index = int(fn.replace(template_, "").replace(".log", ""))  # 日志的下标
-                        exists_log_file_list.append(log_index)
-                    except ValueError:  # 如果异常说明该文件下标位置存在非数字，如triton-main.11-47-2022.0的副本.log
-                        continue
+                    log_index = int(fn.replace(template_, "").replace(".log", ""))  # 日志的下标
+                    exists_log_file_list.append(log_index)
             # 如果当前的日志是99.log满了，需要流转到100.log，那么就要删除0.log保证该天的日志文件只有100个
             assert len(exists_log_file_list) > 0, "当前日志数量一定是大于0的"
             exists_log_file_list.sort()  # 对已有的日志下标进行排序
@@ -172,7 +166,7 @@ class MyHandler(BaseRotatingHandler):
             assert max_index == now_index, "当前日志下标一定是最大的"
             self.baseFilename = os.path.join(self.dir_name, template_file_name % (now_index + 1))
             exists_log_file_list.append(now_index + 1)
-            if len(exists_log_file_list) > self.backup_count:
+            if len(exists_log_file_list) > self.backup_count:  # 删除，保证日志文件数量<=100
                 for i in exists_log_file_list[:len(exists_log_file_list) - self.backup_count]:
                     delete_path = os.path.join(self.dir_name, template_file_name % i)
                     if os.path.exists(delete_path):
@@ -181,7 +175,7 @@ class MyHandler(BaseRotatingHandler):
             self.stream = self._open()
 
 
-class Logger:
+class MyLogger:
     """
     日志工具
     日志的具体路径如：log_dir/{log_module}-{log_type}.{YYYY-MM-DD}.{N}.log
@@ -198,9 +192,9 @@ class Logger:
         self.log_module = log_module
         self.log_type = log_type
         self.log_dir = log_dir
-        self.date_now = get_now_time()  # 当前时间的年月日
-        self.max_bytes = 500  # 最大100M日志
-        self.backup_count = 5  # 每天最多100个日志文件
+        self.date_now = get_current_time()  # 当前时间的年月日
+        self.max_bytes = 100 * 1024 * 1024  # 最大100M日志
+        self.backup_count = 100  # 每天最多100个日志文件
         self.logger = logging.getLogger(os.path.realpath(__file__))
         self.logger.setLevel(log_level[level.lower()])
         self.logger.propagate = False
@@ -231,7 +225,7 @@ class Logger:
         找到最新的日志文件
         """
         exists_log_file_list = []
-        template_ = f"{self.log_module}-{self.log_type}.{get_now_time()}."
+        template_ = f"{self.log_module}-{self.log_type}.{get_current_time()}."
         template_file_name = template_ + "%d.log"
         for fn in os.listdir(self.log_dir):  # 遍历日志文件下已有的文件
             if fn.startswith(template_) and fn.endswith(".log"):
@@ -260,20 +254,9 @@ class Logger:
             file_path = os.path.join(self.log_dir, template_file_name % 0)
             return file_path
 
-    def debug(self, message):
-        self.logger.debug(" | " + str(message))
+    def get_logger(self):
+        return self.logger
 
-    def info(self, message):
-        self.logger.info(" | " + str(message))
-
-    def warning(self, message):
-        self.logger.warning(" | " + str(message))
-
-    def error(self, message, error_code=-1):
-        self.logger.error(str(error_code) + " | " + str(message))
-
-    def critical(self, message):
-        self.logger.critical(" | " + str(message))
-
-
-# logger = Logger(log_module="triton", log_type="main", log_dir="./", level="info")
+# logger = MyLogger(log_module="triton", log_type="main", log_dir="./").get_logger()
+# for i in range(100):
+#     logger.error(i, error_code="500")
