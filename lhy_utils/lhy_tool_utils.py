@@ -1,38 +1,13 @@
 # coding: utf-8
-# import json
 import math
-import multiprocessing
+import random
 import re
 import subprocess
+import time
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
-
-
-class MultiProcessBase:
-    def __init__(self, data, work_nums=4):
-        self.data = data
-        self.data_num = len(self.data)
-        self.work_nums = work_nums
-        self.result = multiprocessing.Manager().dict()
-
-    def task(self, inputs):
-        # for input in process_inputs:
-        #     data = self.data[input]
-        #     self.result[input] = how to process data
-        raise NotImplemented
-
-    def run(self):
-        inputs = list(cut_list(list(range(self.data_num)), math.ceil(self.data_num / self.work_nums)))
-        jobs = [multiprocessing.Process(target=self.task, args=(inputs[i],)) for i in range(self.work_nums)]
-        for job in jobs:
-            job.start()
-        for job in jobs:
-            job.join()
-        result_list = [0] * self.data_num
-        for key, value in self.result.items():
-            result_list[key] = value
-        return result_list
 
 
 def get_gpu_num():
@@ -124,3 +99,41 @@ def exec_shell(cmd):
         # logger.info(f'exec cmd failed. {cmd}', exc_info=True)
         print(f'exec cmd failed. {cmd}')
     return status
+
+
+class MultiProcessBase:
+    def __init__(self, data, work_nums=4, batch_size=None):
+        if batch_size:
+            batch_size = batch_size
+        else:
+            batch_size = math.ceil(len(data) / work_nums)
+        self.input_list = cut_list(data, batch_size)  # 每个进程的数据
+        self.pool = ProcessPoolExecutor(work_nums)
+
+    @staticmethod
+    def task(inputs):
+        raise NotImplemented
+
+    def run(self):
+        obj_list = []
+        for p_id in range(len(self.input_list)):
+            r = self.pool.submit(self.task, self.input_list[p_id])
+            obj_list.append(r)
+        self.pool.shutdown()
+        result_list = []
+        for obj in obj_list:
+            result_list.extend(obj.result())
+        return result_list
+
+
+# class MT(MultiProcessBase):
+#     @staticmethod
+#     def task(inputs):
+#         a = [i ** 8 for i in inputs]
+#         return a
+#
+#
+# if __name__ == '__main__':
+#     data = list(range(10))
+#     m = MT(data)
+#     print(m.run())
