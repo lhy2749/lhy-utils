@@ -170,7 +170,7 @@ class MultiThreadBar:
         else:
             print(f"{self.msg}{self.index} / {self.length - 1}", end="")
         if self.index == self.length:
-            print(f". total cost time: {int(self.cost_time)}")
+            print(f"{self.msg}{self.index - 1} / {self.length - 1}, cost: {int(self.cost_time)}")
             raise StopIteration
         value = self.data[self.index]
         self.index += 1
