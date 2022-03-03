@@ -102,6 +102,14 @@ def exec_shell(cmd):
 
 
 class MultiProcessBase:
+    """
+    class MT(MultiProcessBase):
+        @staticmethod
+        def task(inputs):
+            return [i ** 8 for i in inputs]
+    m=MT().run()
+    """
+
     def __init__(self, data, work_nums=4, batch_size=None):
         if batch_size:
             batch_size = batch_size
@@ -126,14 +134,44 @@ class MultiProcessBase:
         return result_list
 
 
-# class MT(MultiProcessBase):
-#     @staticmethod
-#     def task(inputs):
-#         a = [i ** 8 for i in inputs]
-#         return a
-#
-#
-# if __name__ == '__main__':
-#     data = list(range(10))
-#     m = MT(data)
-#     print(m.run())
+class MultiThreadBar:
+    """
+    for i in MultiThreadBar(data, "te"):
+        pass
+    """
+
+    def __init__(self, iter_data, desc=None):
+        if not hasattr(iter_data, "__iter__"):
+            raise ValueError("data必须是迭代器")
+        self.data = iter_data
+        self.length = len(iter_data)
+        self.index = 0
+        self.start_time = time.time()
+        self.cost_time = 0
+        self.time_step = 0
+        self.last_time = 0
+        self.msg = "\r"
+        if desc:
+            self.msg = self.msg + desc + ": "
+
+    def update_time_step(self):
+        self.cost_time = time.time() - self.start_time
+        self.time_step = self.cost_time / self.index
+        self.last_time = self.time_step * (self.length - self.index)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index != 0:
+            self.update_time_step()
+            print(f"{self.msg}{self.index} / {self.length - 1}, time: {int(self.cost_time)}s / {int(self.last_time)}s",
+                  end="")
+        else:
+            print(f"{self.msg}{self.index} / {self.length - 1}", end="")
+        if self.index == self.length:
+            print(f". total cost time: {int(self.cost_time)}")
+            raise StopIteration
+        value = self.data[self.index]
+        self.index += 1
+        return value
