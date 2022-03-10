@@ -5,40 +5,43 @@ import re
 import subprocess
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import copy
 
 import numpy as np
 
 
-def get_gpu_num():
-    try:
-        patter = r"[0-9]+MiB"
-        all_gpu = []
-        popen = subprocess.Popen("nvidia-smi", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        bz = False
-        while popen.poll() is None:
-            line = popen.stdout.readline().rstrip().decode()
-            if bz:
-                memory = re.findall(patter, line)[0].replace("MiB", "")
-                all_gpu.append(int(memory))
-                bz = False
-            if "GeForce" in line:
-                bz = True
-        all_gpu = np.array(all_gpu)
-        indexs = np.where(all_gpu == np.min(all_gpu))[0]
-        index = -1 if len(indexs) == 0 else indexs[-1]
-        return str(index)
-    except Exception as e:
-        print(str(e))
-        return "-1"
+def read_gpu(return_least=False):
+    import pynvml
+    pynvml.nvmlInit()
+    deviceCount = pynvml.nvmlDeviceGetCount()
+    gpu_list = []
+    for i in range(deviceCount):
+        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+        meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        name = pynvml.nvmlDeviceGetName(handle).decode()
+        total = round(meminfo.total / 1024 ** 3, 2)
+        used = round(meminfo.used / 1024 ** 3, 2)
+        free = round(meminfo.free / 1024 ** 3, 2)
+        information = {
+            "id": i,
+            "name": name,
+            "total": total,
+            "used": used,
+            "free": free
+        }
+        gpu_list.append(information)
+    if return_least:
+        sort_gpu_list = copy.copy(gpu_list)
+        sort_gpu_list.sort(key=lambda x: (x["used"], -x["id"]))
+        least_id = sort_gpu_list[0]["id"]
+        return gpu_list, least_id
+    else:
+        return gpu_list
 
 
 def cut_list(target, batch_size):
     return [target[i:i + batch_size] for i in range(0, len(target), batch_size)]
-
-
-def args_to_str(args):
-    return [str(i) for i in args]
 
 
 def dict_set_value(input_data, args):
@@ -93,10 +96,9 @@ def exec_shell(cmd):
             if re.search(regex, line) is None:
                 print(line)
             else:
-                print.info(line)
+                print(line)
     status = p.returncode
     if status != 0:
-        # logger.info(f'exec cmd failed. {cmd}', exc_info=True)
         print(f'exec cmd failed. {cmd}')
     return status
 
@@ -110,13 +112,16 @@ class MultiProcessBase:
     m=MT().run()
     """
 
-    def __init__(self, data, work_nums=4, batch_size=None):
+    def __init__(self, data, work_nums=4, batch_size=None, pool_type="t"):
         if batch_size:
             batch_size = batch_size
         else:
             batch_size = math.ceil(len(data) / work_nums)
         self.input_list = cut_list(data, batch_size)  # 每个进程的数据
-        self.pool = ProcessPoolExecutor(work_nums)
+        if pool_type == "t":
+            self.pool = ThreadPoolExecutor(work_nums)
+        else:
+            self.pool = ProcessPoolExecutor(work_nums)
 
     @staticmethod
     def task(inputs):
